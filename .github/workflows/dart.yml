@@ -29,10 +29,11 @@ jobs:
         run: flutter pub get
 
       - name: Build IPA (Unsigned)
-        run: flutter build ipa --release --no-codesign
+        run: |
+          flutter build ipa --release --no-codesign --extra-build-args="DEVELOPMENT_TEAM= CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO"
 
-      - name: Upload IPA Artifact
+      - name: Upload Archive Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build
+          name: ios-build-archive
           path: build/ios/archive/Runner.xcarchive
