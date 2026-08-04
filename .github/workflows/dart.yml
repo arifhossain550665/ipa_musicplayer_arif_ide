@@ -26,30 +26,30 @@ jobs:
           cache: true
 
       - name: Install dependencies
-        run: flutter pub get
-
-      - name: Patch Xcode Project Signing Settings
         run: |
-          # Force Xcode project to ignore code signing & team checks
+          flutter pub get
+          cd ios && pod install --repo-update || true
+
+      - name: Bypass Signing & Build iOS
+        run: |
+          # Xcode Project Setting Modifier
           sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' ios/Runner.xcodeproj/project.pbxproj
           sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' ios/Runner.xcodeproj/project.pbxproj
           sed -i '' 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' ios/Runner.xcodeproj/project.pbxproj
 
-      - name: Build iOS Frameworks (No Assembly Validation)
-        run: flutter build ios --release --no-codesign --config-only
-
-      - name: Xcode Archive (Bypass Signing)
+      - name: Xcode Archive
         run: |
           cd ios
-          xcodebuild -workspace Runner.xcworkspace \
-                     -scheme Runner \
-                     -configuration Release \
-                     -archivePath "../build/ios/archive/Runner.xcarchive" \
-                     archive \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGN_IDENTITY="" \
-                     DEVELOPMENT_TEAM=""
+          xcodebuild archive \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath "../build/ios/archive/Runner.xcarchive" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
 
       - name: Upload Archive Artifact
         uses: actions/upload-artifact@v4
