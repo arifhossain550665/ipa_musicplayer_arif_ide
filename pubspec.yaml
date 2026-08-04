@@ -1,0 +1,43 @@
+name: arif_audio_player
+description: "A professional music player app for iOS and Android built with Flutter."
+# দ্য ফলোয়িং লাইন প্রিভেন্ট করে ভুলবশত পাব.দেব-এ পুরো প্রজেক্ট পাবলিক হয়ে যাওয়া থেকে।
+publish_to: 'none' 
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # iOS Files App / Storage থেকে অডিও ফাইল সিলেক্ট করার জন্য
+  file_picker: ^8.0.0
+
+  # হাই-পারফর্ম্যান্স অডিও ইঞ্জিন (প্লেব্যাক, সিক, প্লেলিস্ট কন্ট্রোল)
+  just_audio: ^0.9.36
+
+  # প্লেলিস্ট লোকাল ডিভাইসে স্থায়ীভাবে সেভ রাখার জন্য
+  shared_preferences: ^2.2.2
+
+  # ডিভাইসের ফাইল ডিরেক্টরি সঠিকভাবে অ্যাক্সেস করার জন্য
+  path_provider: ^2.1.2
+
+  # আইকন সেট সুন্দর করার জন্য (ঐচ্ছিক কিন্তু ইউআই-এর জন্য ভালো)
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # কোড ক্লিন রাখার জন্য লিন্টার
+  flutter_lints: ^3.0.0
+
+# অ্যাপের ইন্টারনাল কনফিগারেশন
+flutter:
+  uses-material-design: true
+
+  # অ্যাপে পরবর্তীতে কোনো কাস্টম ইমেজ/ছবি ব্যবহার করতে চাইলে নিচের লাইনগুলো আনকমেন্ট করে ব্যবহার করতে পারেন:
+  # assets:
+  #   - assets/images/
