@@ -1,4 +1,4 @@
-name: iOS Build (Unsigned Archive)
+name: Build Unsigned iOS Archive
 
 on:
   push:
@@ -10,38 +10,37 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # 1. Repository Checkout
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Setup Java (Required for Flutter toolchain)
-      - name: Set up Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      # 3. Setup Flutter
-      - name: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x' # ba tumi je version use koro
           channel: 'stable'
           cache: true
 
-      # 4. Get Dependencies & Build Runner
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           flutter pub get
+          cd ios
+          pod install
+          cd ..
 
-      # 5. Build Unsigned IPA / Archive via Flutter CLI
       - name: Build Unsigned iOS Archive
         run: |
-          flutter build ipa --release --no-codesign
+          xcodebuild archive \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            EXPANDED_CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
 
-      # 6. Upload Artifact
-      - name: Upload Build Artifacts
+      - name: Upload Runner.xcarchive Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build
+          name: Runner-xcarchive
           path: build/ios/archive/Runner.xcarchive
