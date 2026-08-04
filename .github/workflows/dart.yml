@@ -1,58 +1,47 @@
-name: Build Flutter iOS IPA
+name: iOS Build (Unsigned Archive)
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
-  build-ios:
+  build:
     runs-on: macos-latest
 
     steps:
+      # 1. Repository Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Setup Java (Required for Flutter toolchain)
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: '17'
 
+      # 3. Setup Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.x' # ba tumi je version use koro
           channel: 'stable'
           cache: true
 
+      # 4. Get Dependencies & Build Runner
       - name: Install dependencies
         run: |
           flutter pub get
-          cd ios && pod install --repo-update || true
 
-      - name: Bypass Signing & Build iOS
+      # 5. Build Unsigned IPA / Archive via Flutter CLI
+      - name: Build Unsigned iOS Archive
         run: |
-          # Xcode Project Setting Modifier
-          sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' ios/Runner.xcodeproj/project.pbxproj
+          flutter build ipa --release --no-codesign
 
-      - name: Xcode Archive
-        run: |
-          cd ios
-          xcodebuild archive \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -archivePath "../build/ios/archive/Runner.xcarchive" \
-            -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM=""
-
-      - name: Upload Archive Artifact
+      # 6. Upload Artifact
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-archive
+          name: ios-build
           path: build/ios/archive/Runner.xcarchive
