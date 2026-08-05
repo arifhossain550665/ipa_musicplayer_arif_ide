@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:rxdart/rxdart.dart'; // স্মুথ সিকবারের জন্য
 import '../models/song_model.dart';
 import '../models/playlist_model.dart';
 import '../services/audio_player_service.dart';
 import '../services/storage_service.dart';
+
+// PositionData Class (স্মুথ সিকবারের জন্য)
+class PositionData {
+  final Duration position;
+  final Duration bufferedPosition;
+  final Duration duration;
+
+  PositionData(this.position, this.bufferedPosition, this.duration);
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,12 +46,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _isLoading = false;
     });
 
-    if (_playlists.isNotEmpty && _playlists[_activePlaylistIndex].songs.isNotEmpty) {
+    if (_playlists.isNotEmpty &&
+        _playlists[_activePlaylistIndex].songs.isNotEmpty) {
       await _audioService.setPlaylist(_playlists[_activePlaylistIndex].songs);
     }
   }
 
-  // ➕ নতুন নামের প্লেলিস্ট তৈরি করা
+  // ➕ নতুন প্লেলিস্ট তৈরি
   void _createNewPlaylistDialog() {
     final controller = TextEditingController();
     showDialog(
@@ -83,6 +94,42 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // 🗑️ প্লেলিস্ট ডিলিট অ্যালার্ট ডায়ালগ
+  void _confirmDeletePlaylist(int index) {
+    final playlistName = _playlists[index].name;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Playlist'),
+        content: Text('Are you sure you want to delete playlist "$playlistName"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() {
+                _playlists.removeAt(index);
+                if (_activePlaylistIndex >= _playlists.length) {
+                  _activePlaylistIndex = _playlists.isEmpty ? 0 : _playlists.length - 1;
+                }
+              });
+              await _storageService.savePlaylists(_playlists);
+              if (_playlists.isNotEmpty) {
+                await _audioService.setPlaylist(_playlists[_activePlaylistIndex].songs);
+              } else {
+                await _audioService.setPlaylist([]);
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // 🎵 কারেন্ট প্লেলিস্টে গান পিক করা
   Future<void> _pickSongs() async {
     if (_playlists.isEmpty) {
@@ -118,13 +165,53 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _removeSong(int index) async {
-    final currentSongs = _playlists[_activePlaylistIndex].songs;
-    await _audioService.removeAudioSourceAt(index);
-    setState(() {
-      currentSongs.removeAt(index);
-    });
-    await _storageService.savePlaylists(_playlists);
+  // 🗑️ গান রিমুভ অ্যালার্ট ডায়ালগ
+  void _confirmDeleteSong(int index) {
+    final songTitle = _playlists[_activePlaylistIndex].songs[index].title;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Song'),
+        content: Text('Are you sure you want to remove "$songTitle"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final currentSongs = _playlists[_activePlaylistIndex].songs;
+              await _audioService.removeAudioSourceAt(index);
+              setState(() {
+                currentSongs.removeAt(index);
+              });
+              await _storageService.savePlaylists(_playlists);
+            },
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ℹ️ About Dialog (App Developer Name)
+  void _showAboutDialog() {
+    showAboutDialog(
+      context: context,
+      applicationName: 'AH Music Player',
+      applicationVersion: '1.0.0',
+      applicationIcon: const Icon(Icons.music_note, size: 40, color: Colors.deepPurpleAccent),
+      children: [
+        const SizedBox(height: 10),
+        const Text(
+          'App Developer: Arif Hossain',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 5),
+        const Text('Built with Flutter for high-performance iOS music playback.'),
+      ],
+    );
   }
 
   void _listenToCurrentSongIndex() {
@@ -136,6 +223,16 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
   }
+
+  // 🔥 স্মুথ সিকবারের জন্য Rx.combineLatest3 স্ট্রিম
+  Stream<PositionData> get _positionDataStream =>
+      Rx.combineLatest3<Duration, Duration, Duration?, PositionData>(
+        _audioService.player.positionStream,
+        _audioService.player.bufferedPositionStream,
+        _audioService.player.durationStream,
+        (position, bufferedPosition, duration) =>
+            PositionData(position, bufferedPosition, duration ?? Duration.zero),
+      );
 
   @override
   void dispose() {
@@ -157,17 +254,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AH Music Player'),
+        title: const Text('Music Player Pro'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: _showAboutDialog,
+            tooltip: 'About App',
+          ),
           IconButton(
             icon: const Icon(Icons.playlist_add),
             onPressed: _createNewPlaylistDialog,
-            tooltip: 'Create New Playlist',
+            tooltip: 'Create Playlist',
           ),
           IconButton(
             icon: const Icon(Icons.add_to_photos),
             onPressed: _pickSongs,
-            tooltip: 'Add Songs from Files',
+            tooltip: 'Add Songs',
           ),
         ],
       ),
@@ -175,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // 📂 প্লেলিস্ট ট্যাব/লিস্ট (Horizontal Scroll)
+                // 📂 প্লেলিস্ট চিপস ও লং-প্রেস দিয়ে ডিলিট সাপোর্ট
                 if (_playlists.isNotEmpty)
                   SizedBox(
                     height: 50,
@@ -186,18 +288,33 @@ class _HomeScreenState extends State<HomeScreen> {
                         final isSelected = index == _activePlaylistIndex;
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 6.0),
-                          child: ChoiceChip(
-                            label: Text(_playlists[index].name),
-                            selected: isSelected,
-                            selectedColor: Colors.deepPurpleAccent,
-                            onSelected: (bool selected) async {
-                              if (selected) {
-                                setState(() {
-                                  _activePlaylistIndex = index;
-                                });
-                                await _audioService.setPlaylist(_playlists[index].songs);
-                              }
-                            },
+                          child: GestureDetector(
+                            onLongPress: () => _confirmDeletePlaylist(index),
+                            child: ChoiceChip(
+                              label: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(_playlists[index].name),
+                                  if (isSelected) ...[
+                                    const SizedBox(width: 4),
+                                    InkWell(
+                                      onTap: () => _confirmDeletePlaylist(index),
+                                      child: const Icon(Icons.cancel, size: 16, color: Colors.white70),
+                                    )
+                                  ]
+                                ],
+                              ),
+                              selected: isSelected,
+                              selectedColor: Colors.deepPurpleAccent,
+                              onSelected: (bool selected) async {
+                                if (selected) {
+                                  setState(() {
+                                    _activePlaylistIndex = index;
+                                  });
+                                  await _audioService.setPlaylist(_playlists[index].songs);
+                                }
+                              },
+                            ),
                           ),
                         );
                       },
@@ -223,13 +340,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             return Dismissible(
                               key: Key(song.filePath + index.toString()),
                               direction: DismissDirection.endToStart,
+                              confirmDismiss: (direction) async {
+                                _confirmDeleteSong(index);
+                                return false; // অ্যালার্ট দিয়ে কাস্টম ডিলিট হ্যান্ডেল করা
+                              },
                               background: Container(
                                 color: Colors.redAccent,
                                 alignment: Alignment.centerRight,
                                 padding: const EdgeInsets.symmetric(horizontal: 20),
                                 child: const Icon(Icons.delete, color: Colors.white),
                               ),
-                              onDismissed: (_) => _removeSong(index),
                               child: ListTile(
                                 leading: Icon(
                                   isSelected ? Icons.music_note : Icons.music_note_outlined,
@@ -244,7 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 trailing: IconButton(
                                   icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                                  onPressed: () => _removeSong(index),
+                                  onPressed: () => _confirmDeleteSong(index),
                                 ),
                                 onTap: () async {
                                   await _audioService.playSongAtIndex(index);
@@ -284,11 +404,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          StreamBuilder<Duration>(
-            stream: _audioService.player.positionStream,
-            builder: (context, snapshotPosition) {
-              final position = snapshotPosition.data ?? Duration.zero;
-              final duration = _audioService.player.duration ?? Duration.zero;
+
+          // 🔥 অতি স্মুথ সিকবার (PositionData Stream)
+          StreamBuilder<PositionData>(
+            stream: _positionDataStream,
+            builder: (context, snapshot) {
+              final positionData = snapshot.data;
+              final position = positionData?.position ?? Duration.zero;
+              final duration = positionData?.duration ?? Duration.zero;
 
               return Column(
                 children: [
@@ -336,6 +459,7 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
