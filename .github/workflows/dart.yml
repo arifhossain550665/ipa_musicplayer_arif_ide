@@ -1,8 +1,7 @@
-- name: Install Dependencies & Pods
+      - name: Install Dependencies & Pods
         run: |
           flutter pub get
           cd ios
-          # If Podfile is missing, generate default iOS build files
           if [ ! -f "Podfile" ]; then
             cd ..
             flutter create . --platforms=ios
