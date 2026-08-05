@@ -165,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Text(
                   currentSong?.title ?? 'Select a song',
                   maxLines: 1,
-                  overflow: TextSpanOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
