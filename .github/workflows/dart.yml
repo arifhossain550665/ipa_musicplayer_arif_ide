@@ -1,18 +1,27 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: macos-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install Dependencies & Pods
         run: |
           flutter pub get
-          cd ios
-          if [ ! -f "Podfile" ]; then
-            cd ..
+          if [ ! -d "ios" ] || [ ! -f "ios/Podfile" ]; then
             flutter create . --platforms=ios
-            cd ios
           fi
+          cd ios
           pod install --repo-update
-          cd ..
 
       - name: Build Unsigned iOS Archive
         run: |
@@ -23,6 +32,4 @@ jobs:
             -archivePath build/ios/archive/Runner.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            EXPANDED_CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM=""
+            CODE_SIGN_IDENTITY=""
