@@ -1,4 +1,4 @@
-name: iOS Build
+name: iOS Archive Build
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'   # আপনার নিজের Flutter version বসান
+          flutter-version: '3.24.0'   # আপনার নিজের version বসান
           channel: 'stable'
 
       - name: Flutter Doctor
@@ -29,7 +29,6 @@ jobs:
       - name: Ensure iOS platform files exist
         run: |
           if [ ! -d "ios" ] || [ ! -f "ios/Podfile" ]; then
-            echo "iOS folder missing, creating..."
             flutter create . --platforms=ios
           fi
 
@@ -38,7 +37,7 @@ jobs:
           sudo gem install cocoapods
           pod --version
 
-      - name: Clean old Pods (avoid sync errors)
+      - name: Clean old Pods
         run: |
           cd ios
           rm -rf Pods
@@ -49,28 +48,55 @@ jobs:
           cd ios
           pod install --repo-update
 
-      - name: List available schemes (debug helper)
-        run: |
-          xcodebuild -workspace ios/Runner.xcworkspace -list
-
-      - name: Build Unsigned iOS App (Flutter native way)
+      - name: Build Flutter iOS framework (needed before archive)
         run: |
           flutter build ios --release --no-codesign
 
-      - name: Verify build output
+      - name: List available schemes (debug)
         run: |
-          find build/ios -maxdepth 3 -type d
+          xcodebuild -workspace ios/Runner.xcworkspace -list
 
-      - name: Create unsigned IPA (optional, for download)
+      - name: Build Unsigned iOS Archive
         run: |
-          mkdir -p build/ios/iphoneos/Payload
-          cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
-          cd build/ios/iphoneos
-          zip -r -X app-unsigned.ipa Payload
+          xcodebuild archive \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -destination "generic/platform=iOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            EXPANDED_CODE_SIGN_IDENTITY="-" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Verify archive created
+        run: |
+          find build/ios/archive -maxdepth 4
+
+      - name: Manually export IPA from Archive (unsigned)
+        run: |
+          APP_PATH="build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "❌ Runner.app not found inside archive!"
+            exit 1
+          fi
+          mkdir -p build/ios/ipa/Payload
+          cp -r "$APP_PATH" build/ios/ipa/Payload/
+          cd build/ios/ipa
+          zip -r -X Runner-unsigned.ipa Payload
           cd -
+
+      - name: Upload Archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcarchive
+          path: build/ios/archive/Runner.xcarchive
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-ipa
-          path: build/ios/iphoneos/app-unsigned.ipa
+          path: build/ios/ipa/Runner-unsigned.ipa
