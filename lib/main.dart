@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'screens/home_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 🔥 Control Center এবং AirPods প্লেব্যাকের জন্য সার্ভিস চালু করা
+  await JustAudioBackground.init(
+    androidNotificationChannelId: 'com.example.musicplayer.channel.audio',
+    androidNotificationChannelName: 'Audio Playback',
+    androidNotificationOngoing: true,
+  );
+
   runApp(const MusicPlayerApp());
 }
 
@@ -13,7 +22,7 @@ class MusicPlayerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Pro Music Player',
+      title: 'AH Music Player',
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: Colors.black,
         appBarTheme: const AppBarTheme(
