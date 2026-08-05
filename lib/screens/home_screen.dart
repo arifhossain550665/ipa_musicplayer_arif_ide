@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/song_model.dart';
+import '../models/playlist_model.dart';
 import '../services/audio_player_service.dart';
 import '../services/storage_service.dart';
 
@@ -16,30 +17,79 @@ class _HomeScreenState extends State<HomeScreen> {
   final AudioPlayerService _audioService = AudioPlayerService();
   final StorageService _storageService = StorageService();
 
-  List<SongModel> _playlist = [];
+  List<PlaylistModel> _playlists = [];
+  int _activePlaylistIndex = 0;
   bool _isLoading = true;
   int? _currentIndex;
 
   @override
   void initState() {
     super.initState();
-    _loadSavedPlaylist();
+    _loadSavedData();
     _listenToCurrentSongIndex();
   }
 
-  Future<void> _loadSavedPlaylist() async {
-    final savedSongs = await _storageService.loadPlaylist();
+  Future<void> _loadSavedData() async {
+    final savedPlaylists = await _storageService.loadPlaylists();
     setState(() {
-      _playlist = savedSongs;
+      _playlists = savedPlaylists;
       _isLoading = false;
     });
 
-    if (_playlist.isNotEmpty) {
-      await _audioService.setPlaylist(_playlist);
+    if (_playlists.isNotEmpty && _playlists[_activePlaylistIndex].songs.isNotEmpty) {
+      await _audioService.setPlaylist(_playlists[_activePlaylistIndex].songs);
     }
   }
 
+  // ➕ নতুন নামের প্লেলিস্ট তৈরি করা
+  void _createNewPlaylistDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New Playlist'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Enter playlist name...'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                final newPl = PlaylistModel(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  name: name,
+                  songs: [],
+                );
+                setState(() {
+                  _playlists.add(newPl);
+                  _activePlaylistIndex = _playlists.length - 1;
+                });
+                await _storageService.savePlaylists(_playlists);
+                await _audioService.setPlaylist([]);
+              }
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🎵 কারেন্ট প্লেলিস্টে গান পিক করা
   Future<void> _pickSongs() async {
+    if (_playlists.isEmpty) {
+      _createNewPlaylistDialog();
+      return;
+    }
+
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['mp3', 'wav', 'aac', 'm4a'],
@@ -48,7 +98,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result != null && result.files.isNotEmpty) {
       List<SongModel> newSongs = [];
-
       for (var file in result.files) {
         if (file.path != null) {
           newSongs.add(
@@ -61,32 +110,21 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       setState(() {
-        _playlist.addAll(newSongs);
+        _playlists[_activePlaylistIndex].songs.addAll(newSongs);
       });
 
-      await _storageService.savePlaylist(_playlist);
-      await _audioService.setPlaylist(_playlist);
+      await _storageService.savePlaylists(_playlists);
+      await _audioService.setPlaylist(_playlists[_activePlaylistIndex].songs);
     }
   }
 
-  // 🔥 গান রিমুভ করার ফাংশন
   Future<void> _removeSong(int index) async {
-    final songTitle = _playlist[index].title;
-
-    // জাস্ট অডিও প্লেয়ার এবং লোকাল স্টোরেজ থেকে ডিলিট করা
+    final currentSongs = _playlists[_activePlaylistIndex].songs;
     await _audioService.removeAudioSourceAt(index);
-    await _storageService.removeSongAtIndex(index, _playlist);
-
-    setState(() {});
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$songTitle removed from playlist'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+    setState(() {
+      currentSongs.removeAt(index);
+    });
+    await _storageService.savePlaylists(_playlists);
   }
 
   void _listenToCurrentSongIndex() {
@@ -115,10 +153,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final activePlaylist = _playlists.isNotEmpty ? _playlists[_activePlaylistIndex] : null;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('AH Music Player'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.playlist_add),
+            onPressed: _createNewPlaylistDialog,
+            tooltip: 'Create New Playlist',
+          ),
           IconButton(
             icon: const Icon(Icons.add_to_photos),
             onPressed: _pickSongs,
@@ -128,89 +173,98 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _playlist.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No songs added yet.\nTap + icon to add from Apple Files.',
-                    textAlign: TextAlign.center,
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: _playlist.length,
-                  itemBuilder: (context, index) {
-                    final song = _playlist[index];
-                    final isSelected = index == _currentIndex;
-
-                    // 🔥 Swipe to Delete functionality
-                    return Dismissible(
-                      key: Key(song.filePath + index.toString()),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        color: Colors.redAccent,
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: const Icon(Icons.delete, color: Colors.white),
-                      ),
-                      onDismissed: (direction) {
-                        _removeSong(index);
-                      },
-                      child: ListTile(
-                        leading: Icon(
-                          isSelected ? Icons.music_note : Icons.music_note_outlined,
-                          color: isSelected ? Colors.deepPurpleAccent : Colors.grey,
-                        ),
-                        title: Text(
-                          song.title,
-                          style: TextStyle(
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? Colors.deepPurpleAccent : Colors.white,
+          : Column(
+              children: [
+                // 📂 প্লেলিস্ট ট্যাব/লিস্ট (Horizontal Scroll)
+                if (_playlists.isNotEmpty)
+                  SizedBox(
+                    height: 50,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _playlists.length,
+                      itemBuilder: (context, index) {
+                        final isSelected = index == _activePlaylistIndex;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 6.0),
+                          child: ChoiceChip(
+                            label: Text(_playlists[index].name),
+                            selected: isSelected,
+                            selectedColor: Colors.deepPurpleAccent,
+                            onSelected: (bool selected) async {
+                              if (selected) {
+                                setState(() {
+                                  _activePlaylistIndex = index;
+                                });
+                                await _audioService.setPlaylist(_playlists[index].songs);
+                              }
+                            },
                           ),
-                        ),
-                        // 🔥 Delete Button
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                          onPressed: () {
-                            _showDeleteDialog(index, song.title);
+                        );
+                      },
+                    ),
+                  ),
+                const Divider(height: 1),
+
+                // 🎵 গানের লিস্ট
+                Expanded(
+                  child: (activePlaylist == null || activePlaylist.songs.isEmpty)
+                      ? const Center(
+                          child: Text(
+                            'No songs in this playlist.\nTap + icon to add from Apple Files.',
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: activePlaylist.songs.length,
+                          itemBuilder: (context, index) {
+                            final song = activePlaylist.songs[index];
+                            final isSelected = index == _currentIndex;
+
+                            return Dismissible(
+                              key: Key(song.filePath + index.toString()),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                color: Colors.redAccent,
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                child: const Icon(Icons.delete, color: Colors.white),
+                              ),
+                              onDismissed: (_) => _removeSong(index),
+                              child: ListTile(
+                                leading: Icon(
+                                  isSelected ? Icons.music_note : Icons.music_note_outlined,
+                                  color: isSelected ? Colors.deepPurpleAccent : Colors.grey,
+                                ),
+                                title: Text(
+                                  song.title,
+                                  style: TextStyle(
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    color: isSelected ? Colors.deepPurpleAccent : Colors.white,
+                                  ),
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                                  onPressed: () => _removeSong(index),
+                                ),
+                                onTap: () async {
+                                  await _audioService.playSongAtIndex(index);
+                                },
+                              ),
+                            );
                           },
                         ),
-                        onTap: () async {
-                          await _audioService.playSongAtIndex(index);
-                        },
-                      ),
-                    );
-                  },
                 ),
-      bottomNavigationBar: _playlist.isNotEmpty ? _buildPlayerControls() : null,
+              ],
+            ),
+      bottomNavigationBar: (activePlaylist != null && activePlaylist.songs.isNotEmpty)
+          ? _buildPlayerControls(activePlaylist.songs)
+          : null,
     );
   }
 
-  // ডিলিট কনফার্মেশন পপআপ ডায়ালগ
-  void _showDeleteDialog(int index, String title) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove Song'),
-        content: Text('Are you sure you want to remove "$title" from playlist?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _removeSong(index);
-            },
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlayerControls() {
-    final currentSong = (_currentIndex != null && _currentIndex! < _playlist.length)
-        ? _playlist[_currentIndex!]
+  Widget _buildPlayerControls(List<SongModel> songs) {
+    final currentSong = (_currentIndex != null && _currentIndex! < songs.length)
+        ? songs[_currentIndex!]
         : null;
 
     return Container(
@@ -230,8 +284,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 4),
-
-          // Seekbar
           StreamBuilder<Duration>(
             stream: _audioService.player.positionStream,
             builder: (context, snapshotPosition) {
@@ -284,16 +336,12 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-
-          // Media Buttons
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
                 icon: const Icon(Icons.skip_previous, size: 32, color: Colors.white),
-                onPressed: () async {
-                  await _audioService.seekToPrevious();
-                },
+                onPressed: () async => await _audioService.seekToPrevious(),
               ),
               const SizedBox(width: 16),
               StreamBuilder<PlayerState>(
@@ -321,9 +369,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 16),
               IconButton(
                 icon: const Icon(Icons.skip_next, size: 32, color: Colors.white),
-                onPressed: () async {
-                  await _audioService.seekToNext();
-                },
+                onPressed: () async => await _audioService.seekToNext(),
               ),
             ],
           ),
