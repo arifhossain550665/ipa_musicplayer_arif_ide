@@ -28,6 +28,7 @@ dependencies:
 
   # আইকন সেটের জন্য
   cupertino_icons: ^1.0.8
+  rxdart: ^0.28.0 # 🔥 সিকবার স্মুথ করার জন্য
 
 dev_dependencies:
   flutter_test:
