@@ -1,35 +1,25 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/song_model.dart';
+import '../models/playlist_model.dart';
 
 class StorageService {
-  static const String _playlistKey = 'saved_playlist';
+  static const String _playlistsKey = 'saved_playlists_v2';
 
-  // প্লেলিস্ট সেভ করা
-  Future<void> savePlaylist(List<SongModel> playlist) async {
+  Future<void> savePlaylists(List<PlaylistModel> playlists) async {
     final prefs = await SharedPreferences.getInstance();
-    final List<String> songJsonList =
-        playlist.map((song) => song.toJson()).toList();
-    await prefs.setStringList(_playlistKey, songJsonList);
+    final List<String> playlistJsonList =
+        playlists.map((pl) => pl.toJson()).toList();
+    await prefs.setStringList(_playlistsKey, playlistJsonList);
   }
 
-  // সেভ করা প্লেলিস্ট লোড করা
-  Future<List<SongModel>> loadPlaylist() async {
+  Future<List<PlaylistModel>> loadPlaylists() async {
     final prefs = await SharedPreferences.getInstance();
-    final List<String>? songJsonList = prefs.getStringList(_playlistKey);
+    final List<String>? playlistJsonList = prefs.getStringList(_playlistsKey);
 
-    if (songJsonList == null) return [];
+    if (playlistJsonList == null || playlistJsonList.isEmpty) return [];
 
-    return songJsonList
-        .map((songJson) => SongModel.fromJson(songJson))
+    return playlistJsonList
+        .map((plJson) => PlaylistModel.fromJson(plJson))
         .toList();
-  }
-
-  // নির্দিষ্ট গান রিমুভ করে আপডেট সেভ করা
-  Future<void> removeSongAtIndex(int index, List<SongModel> currentPlaylist) async {
-    if (index >= 0 && index < currentPlaylist.length) {
-      currentPlaylist.removeAt(index);
-      await savePlaylist(currentPlaylist);
-    }
   }
 }
