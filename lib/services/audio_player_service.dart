@@ -23,7 +23,7 @@ class AudioPlayerService {
           id: song.filePath,
           album: "My Playlist",
           title: song.title,
-          artist: "Local Storage",
+          artist: "AH Music Player",
         ),
       );
     }).toList();
