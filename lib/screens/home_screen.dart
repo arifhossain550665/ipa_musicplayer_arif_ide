@@ -254,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Music Player Pro'),
+        title: const Text('AH Music Player'),
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline),
