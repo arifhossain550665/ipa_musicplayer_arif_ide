@@ -17,25 +17,60 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'   # আপনার প্রজেক্টের Flutter version দিন
+          flutter-version: '3.24.0'   # আপনার নিজের Flutter version বসান
           channel: 'stable'
 
-      - name: Install Dependencies & Pods
+      - name: Flutter Doctor
+        run: flutter doctor -v
+
+      - name: Get Flutter Dependencies
+        run: flutter pub get
+
+      - name: Ensure iOS platform files exist
         run: |
-          flutter pub get
           if [ ! -d "ios" ] || [ ! -f "ios/Podfile" ]; then
+            echo "iOS folder missing, creating..."
             flutter create . --platforms=ios
           fi
+
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
+          pod --version
+
+      - name: Clean old Pods (avoid sync errors)
+        run: |
+          cd ios
+          rm -rf Pods
+          rm -f Podfile.lock
+
+      - name: Pod Install
+        run: |
           cd ios
           pod install --repo-update
 
-      - name: Build Unsigned iOS Archive
+      - name: List available schemes (debug helper)
         run: |
-          xcodebuild archive \
-            -workspace ios/Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -archivePath build/ios/archive/Runner.xcarchive \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+          xcodebuild -workspace ios/Runner.xcworkspace -list
+
+      - name: Build Unsigned iOS App (Flutter native way)
+        run: |
+          flutter build ios --release --no-codesign
+
+      - name: Verify build output
+        run: |
+          find build/ios -maxdepth 3 -type d
+
+      - name: Create unsigned IPA (optional, for download)
+        run: |
+          mkdir -p build/ios/iphoneos/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
+          cd build/ios/iphoneos
+          zip -r -X app-unsigned.ipa Payload
+          cd -
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ipa
+          path: build/ios/iphoneos/app-unsigned.ipa
