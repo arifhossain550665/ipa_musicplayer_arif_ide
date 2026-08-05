@@ -17,7 +17,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'   # আপনার নিজের version বসান
+          flutter-version: '3.24.0'
           channel: 'stable'
 
       - name: Flutter Doctor
@@ -48,9 +48,13 @@ jobs:
           cd ios
           pod install --repo-update
 
-      - name: Build Flutter iOS framework (needed before archive)
+      # ⭐ মূল Fix: Automatic signing কে জোর করে Manual করে দেওয়া হচ্ছে
+      - name: Force disable code signing in Xcode project
         run: |
-          flutter build ios --release --no-codesign
+          cd ios
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = .*/"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";/g' Runner.xcodeproj/project.pbxproj
 
       - name: List available schemes (debug)
         run: |
@@ -64,10 +68,11 @@ jobs:
             -configuration Release \
             -archivePath build/ios/archive/Runner.xcarchive \
             -destination "generic/platform=iOS" \
+            CODE_SIGN_STYLE=Manual \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGN_ENTITLEMENTS="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             EXPANDED_CODE_SIGN_IDENTITY="-" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             DEVELOPMENT_TEAM=""
