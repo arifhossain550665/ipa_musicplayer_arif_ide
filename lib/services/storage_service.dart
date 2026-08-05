@@ -24,4 +24,12 @@ class StorageService {
         .map((songJson) => SongModel.fromJson(songJson))
         .toList();
   }
+
+  // নির্দিষ্ট গান রিমুভ করে আপডেট সেভ করা
+  Future<void> removeSongAtIndex(int index, List<SongModel> currentPlaylist) async {
+    if (index >= 0 && index < currentPlaylist.length) {
+      currentPlaylist.removeAt(index);
+      await savePlaylist(currentPlaylist);
+    }
+  }
 }
