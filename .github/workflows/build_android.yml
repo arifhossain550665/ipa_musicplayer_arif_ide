@@ -1,53 +1,33 @@
-name: Build Android APK
+name: Generate Android Folder and Push
 
 on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
-
-# একই সাথে একাধিক বিল্ড চালু হলে অটো-ক্যানসেল প্রতিরোধ করার জন্য
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  workflow_dispatch: # ম্যানুয়ালি রান করার জন্য
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
-
+  generate:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.x'
-          channel: 'stable'
-          cache: true
 
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Re-generate Android Platform Files
-        run: flutter create --platforms=android .
-
-      - name: Add Storage Permissions
+      - name: Generate Android Folder
         run: |
+          flutter create --platforms=android .
+          
+          # AndroidManifest-এ পারমিশন যোগ করা
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
           PERMISSIONS='<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>'
           sed -i "/<manifest/a \    $PERMISSIONS" $MANIFEST_PATH
 
-      - name: Build Android APK
-        run: flutter build apk --release
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Music-Player-Android
-          path: build/app/outputs/flutter-apk/app-release.apk
+      - name: Commit and Push Android Folder
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add android/
+          git commit -m "Add android platform folder with permissions"
+          git push
