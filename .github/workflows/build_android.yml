@@ -1,33 +1,20 @@
-name: Generate Android Folder and Push
+name: APK Build
 
 on:
-  workflow_dispatch: # ম্যানুয়ালি রান করার জন্য
+  workflow_dispatch:
 
 jobs:
-  generate:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.x'
-
-      - name: Generate Android Folder
-        run: |
-          flutter create --platforms=android .
-          
-          # AndroidManifest-এ পারমিশন যোগ করা
-          MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
-          PERMISSIONS='<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>'
-          sed -i "/<manifest/a \    $PERMISSIONS" $MANIFEST_PATH
-
-      - name: Commit and Push Android Folder
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add android/
-          git commit -m "Add android platform folder with permissions"
-          git push
+      - run: flutter pub get
+      - run: flutter create --platforms=android .
+      - run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
