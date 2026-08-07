@@ -5,14 +5,13 @@ import 'package:just_audio_background/just_audio_background.dart';
 import '../models/song_model.dart';
 
 class AudioPlayerService {
-  // Singleton pattern to ensure single AudioPlayer instance
   static final AudioPlayerService _instance = AudioPlayerService._internal();
   factory AudioPlayerService() => _instance;
   AudioPlayerService._internal();
 
   final AudioPlayer player = AudioPlayer();
 
-  // 🎵 প্লেলিস্ট সেট করা (LateInitializationError Fix)
+  // 🎵 সরাসরি ফোন স্টোরেজ থেকে প্লেলিস্ট সেট করা
   Future<void> setPlaylist(List<SongModel> songs) async {
     try {
       if (songs.isEmpty) {
@@ -23,18 +22,15 @@ class AudioPlayerService {
       final playlist = ConcatenatingAudioSource(
         useLazyPreparation: true,
         children: songs.map((song) {
-          // File path verification
-          final file = File(song.filePath);
-          final uri = Uri.file(file.path);
-
-          // Unique ID generate for MediaItem (Fixes _audioHandler crash)
+          // 🎯 ফাইল পাথ সরাসরি ফোনের ফাইল সিস্টেম থেকে রিড করা
+          final uri = Uri.file(song.filePath);
           final uniqueId = song.filePath.hashCode.toString();
 
           return AudioSource.uri(
             uri,
             tag: MediaItem(
               id: uniqueId,
-              album: "Local Music",
+              album: "Storage Music",
               title: song.title.isNotEmpty ? song.title : "Unknown Title",
               artist: "AH Music Player",
             ),
@@ -54,7 +50,7 @@ class AudioPlayerService {
   Future<void> play() async => await player.play();
   Future<void> pause() async => await player.pause();
   Future<void> seek(Duration position) async => await player.seek(position);
-  
+
   Future<void> seekToNext() async {
     if (player.hasNext) {
       await player.seekToNext();
