@@ -24,14 +24,11 @@ class AudioPlayerService {
       }).toList(),
     );
 
-    try {
-      await player.setAudioSource(playlist);
-    } catch (e) {
-      debugPrint("Audio Player Error: $e");
-    }
+    // এখন আর error ট লুকিয়ে রাখবে না, উপরে ছুঁড়ে দেব যাতে UI তে দেখানো যায়
+    await player.setAudioSource(playlist);
   }
 
-  // ⏯️ প্লেব্যাক কন্ট্রোল
+  // ⏯️ প্লেবক কন্ট্রোল
   Future<void> play() async => await player.play();
   Future<void> pause() async => await player.pause();
   Future<void> seek(Duration position) async => await player.seek(position);
