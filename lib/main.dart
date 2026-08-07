@@ -1,23 +1,40 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'screens/home_screen.dart';
+
+// 🔴 Global status flag - background init সফল হলো কিনা এটা ট্র্যাক করবে
+class AudioBackendStatus {
+  static bool isReady = true;
+  static String? errorMessage;
+}
 
 Future<void> main() async {
   // ১. ফ্ল্যাটার ইঞ্জিন প্রস্তুত করা
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ২. JustAudioBackground ব্যাকগ্রাউন্ড প্রসেস সুরক্ষিতভাবে চালু করা
+  // ২. নোটিফিকেশন পারমিশন আগে চাওয়া (Android 13+) - JustAudioBackground.init()
+  //    এর আগে এটা না চাইলে audioHandler silently fail করে
+  if (Platform.isAndroid) {
+    await Permission.notification.request();
+  }
+
+  // ৩. JustAudioBackground ব্যাকগ্রাউন্ড প্রসেস সুরক্ষিতভাবে চালু করা
   try {
     await JustAudioBackground.init(
       androidNotificationChannelId: 'com.example.musicplayer.channel.audio',
       androidNotificationChannelName: 'Audio Playback',
       androidNotificationOngoing: true,
     );
-  } catch (e) {
+  } catch (e, st) {
+    AudioBackendStatus.isReady = false;
+    AudioBackendStatus.errorMessage = e.toString();
     debugPrint("JustAudioBackground Error: $e");
+    debugPrint("StackTrace: $st");
   }
 
-  // ৩. সার্ভিস চালু হোক বা না হোক, অ্যাপের UI লোড করে দেওয়া
+  // ৪. সার্ভিস চালু হোক বা না হোক, অ্যাপের UI লোড করে দেওয়া
   runApp(const MusicPlayerApp());
 }
 
