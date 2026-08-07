@@ -7,11 +7,10 @@ import '../models/song_model.dart';
 class AudioPlayerService {
   final AudioPlayer player = AudioPlayer();
 
-  // 🎵 প্লেলিস্ট লোড ও ফাইল প্লে করার ফিক্সড ফাংশন
+  // 🎵 প্লেলিস্ট সেট করা
   Future<void> setPlaylist(List<SongModel> songs) async {
     final playlist = ConcatenatingAudioSource(
       children: songs.map((song) {
-        // Android and iOS safe File URI conversion
         final uri = Uri.file(song.filePath);
         return AudioSource.uri(
           uri,
@@ -32,7 +31,7 @@ class AudioPlayerService {
     }
   }
 
-  // ⏯️ প্লে / পজ কন্ট্রোলস
+  // ⏯️ প্লেব্যাক কন্ট্রোল
   Future<void> play() async => await player.play();
   Future<void> pause() async => await player.pause();
   Future<void> seek(Duration position) async => await player.seek(position);
