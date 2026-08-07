@@ -3,9 +3,9 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <application
-        android:label="ipa_musicplayer_arif_ide"
+        android:label="AH Music Player"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/IMG_0405">
         <activity
             android:name=".MainActivity"
             android:exported="true"
