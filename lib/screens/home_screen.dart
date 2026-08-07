@@ -44,14 +44,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _listenToCurrentSongIndex();
   }
 
-  Future<void> _requestStoragePermission() async {
+    Future<void> _requestStoragePermission() async {
     if (Platform.isAndroid) {
       await [
         Permission.storage,
         Permission.audio,
+        Permission.notification,
       ].request();
     }
   }
+
 
   Future<void> _loadSavedData() async {
     final savedPlaylists = await _storageService.loadPlaylists();
