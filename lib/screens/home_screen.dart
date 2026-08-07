@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:permission_handler/permission_handler.dart'; // 🔑 পারমিশন হ্যান্ডলার
+import 'package:permission_handler/permission_handler.dart';
 import 'package:rxdart/rxdart.dart';
 import '../models/song_model.dart';
 import '../models/playlist_model.dart';
@@ -37,12 +37,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _requestStoragePermission(); // 🔑 অ্যাপ ওপেন হতেই পারমিশন চাওয়া
+    _requestStoragePermission();
     _loadSavedData();
     _listenToCurrentSongIndex();
   }
 
-  // 🔑 রানটাইম পারমিশন ফাংশন
+  // 🔑 পারমিশন ফাংশন
   Future<void> _requestStoragePermission() async {
     if (Platform.isAndroid) {
       await [
@@ -143,9 +143,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🎵 কারেন্ট প্লেলিস্টে গান পিক করা
+  // 🎵 কারেন্ট প্লেলিস্টে গান পিক করা (Android Safe FilePicker)
   Future<void> _pickSongs() async {
-    // ফাইল সিলেক্ট করার পূর্বে পারমিশন নিশ্চিত করা
     await _requestStoragePermission();
 
     if (_playlists.isEmpty) {
@@ -211,7 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ℹ️ About Dialog (App Developer Name)
+  // ℹ️ About Dialog
   void _showAboutDialog() {
     showAboutDialog(
       context: context,
@@ -225,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 5),
-        const Text('High-performance cross-platform audio player built with Flutter.'),
+        const Text('High-performance audio player built with Flutter.'),
       ],
     );
   }
@@ -293,7 +292,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // 📂 প্লেলিস্ট চিপস ও লং-প্রেস দিয়ে ডিলিট সাপোর্ট
                 if (_playlists.isNotEmpty)
                   SizedBox(
                     height: 50,
@@ -338,7 +336,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 const Divider(height: 1),
 
-                // 🎵 গানের লিস্ট
                 Expanded(
                   child: (activePlaylist == null || activePlaylist.songs.isEmpty)
                       ? const Center(
@@ -358,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               direction: DismissDirection.endToStart,
                               confirmDismiss: (direction) async {
                                 _confirmDeleteSong(index);
-                                return false; // অ্যালার্ট দিয়ে কাস্টম ডিলিট হ্যান্ডেল করা
+                                return false;
                               },
                               background: Container(
                                 color: Colors.redAccent,
@@ -421,7 +418,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 4),
 
-          // 🔥 অতি স্মুথ সিকবার (PositionData Stream)
           StreamBuilder<PositionData>(
             stream: _positionDataStream,
             builder: (context, snapshot) {
