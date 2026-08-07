@@ -1,20 +1,78 @@
-name: APK Build
+name: Build Android APK with Custom Icon & Name
 
 on:
+  push:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.x'
-      - run: flutter pub get
-      - run: flutter create --platforms=android .
-      - run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # ১. পুরানো অ্যান্ড্রয়েড ফোল্ডার মুছে নিখুঁত ফ্রেশ ফোল্ডার জেনারেট করা
+      - name: Recreate Android Folder
+        run: |
+          rm -rf android
+          flutter create --platforms=android --org com.ah.musicplayer --project-name ah_music_player .
+
+      # 🏷️ ২. অ্যাপের নাম পরিবর্তন করে "AH Music Player" রাখা
+      - name: Set App Name to AH Music Player
+        run: |
+          MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+          sed -i 's/android:label=".*"/android:label="AH Music Player"/' $MANIFEST_PATH
+
+      # 🔑 ৩. স্টোরেজ ও ব্যাকগ্রাউন্ড প্লেয়ার পারমিশন যোগ করা
+      - name: Add Permissions
+        run: |
+          MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+          PERMISSIONS='<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>'
+          sed -i "/<manifest/a \    $PERMISSIONS" $MANIFEST_PATH
+
+      # 🖼️ ৪. আপনার দেওয়া লোগোটি অ্যাপের মূল আইকন হিসেবে বসানো
+      - name: Apply Custom Logo/Icon
+        run: |
+          if [ -f "assets/app_icon.png" ]; then
+            # flutter_launcher_icons প্যাকেজ দিয়ে অটো আইকন সেট করার ব্যবস্থা
+            flutter pub add --dev flutter_launcher_icons
+            cat <<EOT >> pubspec.yaml
+
+          flutter_launcher_icons:
+            android: true
+            ios: true
+            image_path: "assets/app_icon.png"
+          EOT
+            flutter pub get
+            dart run flutter_launcher_icons
+          else
+            echo "Warning: assets/app_icon.png not found! Default icon will be used."
+          fi
+
+      # 🛠️ ৫. APK বিল্ড করা
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      - name: Upload Finished APK
+        uses: actions/upload-artifact@v4
         with:
-          name: app-apk
+          name: AH-Music-Player-APK
           path: build/app/outputs/flutter-apk/app-release.apk
