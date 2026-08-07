@@ -5,7 +5,7 @@
     <application
         android:label="AH Music Player"
         android:name="${applicationName}"
-        android:icon="@mipmap/IMG_0405">
+        android:icon="@mipmap/ic_lunch">
         <activity
             android:name=".MainActivity"
             android:exported="true"
