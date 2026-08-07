@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
+
 import '../models/song_model.dart';
 import '../models/playlist_model.dart';
 import '../services/audio_player_service.dart';
 import '../services/storage_service.dart';
 
-// PositionData Class (স্মুথ সিকবারের জন্য)
 class PositionData {
   final Duration position;
   final Duration bufferedPosition;
@@ -42,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _listenToCurrentSongIndex();
   }
 
-  // 🔑 পারমিশন ফাংশন
   Future<void> _requestStoragePermission() async {
     if (Platform.isAndroid) {
       await [
@@ -65,7 +66,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ➕ নতুন প্লেলিস্ট তৈরি
   void _createNewPlaylistDialog() {
     final controller = TextEditingController();
     showDialog(
@@ -107,7 +107,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🗑️ প্লেলিস্ট ডিলিট অ্যালার্ট ডায়ালগ
   void _confirmDeletePlaylist(int index) {
     final playlistName = _playlists[index].name;
     showDialog(
@@ -126,12 +125,14 @@ class _HomeScreenState extends State<HomeScreen> {
               setState(() {
                 _playlists.removeAt(index);
                 if (_activePlaylistIndex >= _playlists.length) {
-                  _activePlaylistIndex = _playlists.isEmpty ? 0 : _playlists.length - 1;
+                  _activePlaylistIndex =
+                      _playlists.isEmpty ? 0 : _playlists.length - 1;
                 }
               });
               await _storageService.savePlaylists(_playlists);
               if (_playlists.isNotEmpty) {
-                await _audioService.setPlaylist(_playlists[_activePlaylistIndex].songs);
+                await _audioService
+                    .setPlaylist(_playlists[_activePlaylistIndex].songs);
               } else {
                 await _audioService.setPlaylist([]);
               }
@@ -143,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🎵 কারেন্ট প্লেলিস্টে গান পিক করা (Android Safe FilePicker)
+  // 🔥 Android 11+ Fix: ফাইলটিকে অ্যাপের স্যান্ডবক্সে কপি করে নেওয়ার মেথড
   Future<void> _pickSongs() async {
     await _requestStoragePermission();
 
@@ -160,12 +161,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result != null && result.files.isNotEmpty) {
       List<SongModel> newSongs = [];
+      final appDir = await getApplicationDocumentsDirectory();
+
       for (var file in result.files) {
         if (file.path != null) {
+          final originalFile = File(file.path!);
+          final fileName = p.basename(file.path!);
+          final savedPath = p.join(appDir.path, fileName);
+
+          // ফাইল যদি আগে কপি না হয়ে থাকে তবে কপি করবে
+          File targetFile = File(savedPath);
+          if (!await targetFile.exists()) {
+            targetFile = await originalFile.copy(savedPath);
+          }
+
           newSongs.add(
             SongModel(
               title: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-              filePath: file.path!,
+              filePath: targetFile.path,
             ),
           );
         }
@@ -180,7 +193,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 🗑️ গান রিমুভ অ্যালার্ট ডায়ালগ
   void _confirmDeleteSong(int index) {
     final songTitle = _playlists[_activePlaylistIndex].songs[index].title;
     showDialog(
@@ -210,13 +222,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ℹ️ About Dialog
   void _showAboutDialog() {
     showAboutDialog(
       context: context,
       applicationName: 'AH Music Player',
       applicationVersion: '1.0.0',
-      applicationIcon: const Icon(Icons.music_note, size: 40, color: Colors.deepPurpleAccent),
+      applicationIcon: const Icon(Icons.music_note,
+          size: 40, color: Colors.deepPurpleAccent),
       children: [
         const SizedBox(height: 10),
         const Text(
@@ -239,14 +251,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // 🔥 স্মুথ সিকবারের জন্য Rx.combineLatest3 স্ট্রিম
   Stream<PositionData> get _positionDataStream =>
       Rx.combineLatest3<Duration, Duration, Duration?, PositionData>(
         _audioService.player.positionStream,
         _audioService.player.bufferedPositionStream,
         _audioService.player.durationStream,
-        (position, bufferedPosition, duration) =>
-            PositionData(position, bufferedPosition, duration ?? Duration.zero),
+        (position, bufferedPosition, duration) => PositionData(
+            position, bufferedPosition, duration ?? Duration.zero),
       );
 
   @override
@@ -265,7 +276,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activePlaylist = _playlists.isNotEmpty ? _playlists[_activePlaylistIndex] : null;
+    final activePlaylist =
+        _playlists.isNotEmpty ? _playlists[_activePlaylistIndex] : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -301,7 +313,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemBuilder: (context, index) {
                         final isSelected = index == _activePlaylistIndex;
                         return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 6.0),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4.0, vertical: 6.0),
                           child: GestureDetector(
                             onLongPress: () => _confirmDeletePlaylist(index),
                             child: ChoiceChip(
@@ -313,7 +326,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     const SizedBox(width: 4),
                                     InkWell(
                                       onTap: () => _confirmDeletePlaylist(index),
-                                      child: const Icon(Icons.cancel, size: 16, color: Colors.white70),
+                                      child: const Icon(Icons.cancel,
+                                          size: 16, color: Colors.white70),
                                     )
                                   ]
                                 ],
@@ -325,7 +339,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                   setState(() {
                                     _activePlaylistIndex = index;
                                   });
-                                  await _audioService.setPlaylist(_playlists[index].songs);
+                                  await _audioService.setPlaylist(
+                                      _playlists[index].songs);
                                 }
                               },
                             ),
@@ -335,9 +350,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 const Divider(height: 1),
-
                 Expanded(
-                  child: (activePlaylist == null || activePlaylist.songs.isEmpty)
+                  child: (activePlaylist == null ||
+                          activePlaylist.songs.isEmpty)
                       ? const Center(
                           child: Text(
                             'No songs in this playlist.\nTap + icon to add music files.',
@@ -360,23 +375,34 @@ class _HomeScreenState extends State<HomeScreen> {
                               background: Container(
                                 color: Colors.redAccent,
                                 alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
-                                child: const Icon(Icons.delete, color: Colors.white),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 20),
+                                child: const Icon(Icons.delete,
+                                    color: Colors.white),
                               ),
                               child: ListTile(
                                 leading: Icon(
-                                  isSelected ? Icons.music_note : Icons.music_note_outlined,
-                                  color: isSelected ? Colors.deepPurpleAccent : Colors.grey,
+                                  isSelected
+                                      ? Icons.music_note
+                                      : Icons.music_note_outlined,
+                                  color: isSelected
+                                      ? Colors.deepPurpleAccent
+                                      : Colors.grey,
                                 ),
                                 title: Text(
                                   song.title,
                                   style: TextStyle(
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                    color: isSelected ? Colors.deepPurpleAccent : Colors.white,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: isSelected
+                                        ? Colors.deepPurpleAccent
+                                        : Colors.white,
                                   ),
                                 ),
                                 trailing: IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                                  icon: const Icon(Icons.delete_outline,
+                                      color: Colors.grey),
                                   onPressed: () => _confirmDeleteSong(index),
                                 ),
                                 onTap: () async {
@@ -389,16 +415,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-      bottomNavigationBar: (activePlaylist != null && activePlaylist.songs.isNotEmpty)
+      bottomNavigationBar: (activePlaylist != null &&
+              activePlaylist.songs.isNotEmpty)
           ? _buildPlayerControls(activePlaylist.songs)
           : null,
     );
   }
 
   Widget _buildPlayerControls(List<SongModel> songs) {
-    final currentSong = (_currentIndex != null && _currentIndex! < songs.length)
-        ? songs[_currentIndex!]
-        : null;
+    final currentSong =
+        (_currentIndex != null && _currentIndex! < songs.length)
+            ? songs[_currentIndex!]
+            : null;
 
     return Container(
       color: Colors.grey[900],
@@ -417,7 +445,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 4),
-
           StreamBuilder<PositionData>(
             stream: _positionDataStream,
             builder: (context, snapshot) {
@@ -429,8 +456,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   SliderTheme(
                     data: SliderTheme.of(context).copyWith(
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.0),
-                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 12.0),
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 6.0),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 12.0),
                       trackHeight: 3.0,
                     ),
                     child: Slider(
@@ -447,7 +476,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 : 1.0,
                           ),
                       onChanged: (value) {
-                        _audioService.seek(Duration(milliseconds: value.toInt()));
+                        _audioService
+                            .seek(Duration(milliseconds: value.toInt()));
                       },
                     ),
                   ),
@@ -458,11 +488,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Text(
                           _formatDuration(position),
-                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                          style:
+                              const TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                         Text(
                           _formatDuration(duration),
-                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                          style:
+                              const TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                       ],
                     ),
@@ -471,12 +503,12 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
-                icon: const Icon(Icons.skip_previous, size: 32, color: Colors.white),
+                icon: const Icon(Icons.skip_previous,
+                    size: 32, color: Colors.white),
                 onPressed: () async => await _audioService.seekToPrevious(),
               ),
               const SizedBox(width: 16),
@@ -488,7 +520,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   return IconButton(
                     icon: Icon(
-                      playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                      playing
+                          ? Icons.pause_circle_filled
+                          : Icons.play_circle_fill,
                       size: 48,
                       color: Colors.deepPurpleAccent,
                     ),
@@ -504,7 +538,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(width: 16),
               IconButton(
-                icon: const Icon(Icons.skip_next, size: 32, color: Colors.white),
+                icon: const Icon(Icons.skip_next,
+                    size: 32, color: Colors.white),
                 onPressed: () async => await _audioService.seekToNext(),
               ),
             ],
