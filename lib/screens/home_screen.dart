@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:rxdart/rxdart.dart'; // স্মুথ সিকবারের জন্য
+import 'package:permission_handler/permission_handler.dart'; // 🔑 পারমিশন হ্যান্ডলার
+import 'package:rxdart/rxdart.dart';
 import '../models/song_model.dart';
 import '../models/playlist_model.dart';
 import '../services/audio_player_service.dart';
@@ -35,8 +37,19 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _requestStoragePermission(); // 🔑 অ্যাপ ওপেন হতেই পারমিশন চাওয়া
     _loadSavedData();
     _listenToCurrentSongIndex();
+  }
+
+  // 🔑 রানটাইম পারমিশন ফাংশন
+  Future<void> _requestStoragePermission() async {
+    if (Platform.isAndroid) {
+      await [
+        Permission.storage,
+        Permission.audio,
+      ].request();
+    }
   }
 
   Future<void> _loadSavedData() async {
@@ -132,6 +145,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // 🎵 কারেন্ট প্লেলিস্টে গান পিক করা
   Future<void> _pickSongs() async {
+    // ফাইল সিলেক্ট করার পূর্বে পারমিশন নিশ্চিত করা
+    await _requestStoragePermission();
+
     if (_playlists.isEmpty) {
       _createNewPlaylistDialog();
       return;
@@ -139,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'aac', 'm4a'],
+      allowedExtensions: ['mp3', 'wav', 'aac', 'm4a', 'flac'],
       allowMultiple: true,
     );
 
@@ -209,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 5),
-        const Text('Built with Flutter for high-performance iOS music playback.'),
+        const Text('High-performance cross-platform audio player built with Flutter.'),
       ],
     );
   }
@@ -327,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: (activePlaylist == null || activePlaylist.songs.isEmpty)
                       ? const Center(
                           child: Text(
-                            'No songs in this playlist.\nTap + icon to add from Apple Files.',
+                            'No songs in this playlist.\nTap + icon to add music files.',
                             textAlign: TextAlign.center,
                           ),
                         )
