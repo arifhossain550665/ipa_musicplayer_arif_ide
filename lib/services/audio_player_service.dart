@@ -1,66 +1,59 @@
+import 'dart:io';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import '../models/song_model.dart';
 
 class AudioPlayerService {
-  final AudioPlayer _player = AudioPlayer();
-  ConcatenatingAudioSource? _playlistSource;
+  final AudioPlayer player = AudioPlayer();
 
-  AudioPlayer get player => _player;
-
-  Future<void> setPlaylist(List<SongModel> playlist) async {
-    if (playlist.isEmpty) {
-      await _player.stop();
-      _playlistSource = ConcatenatingAudioSource(children: []);
-      return;
-    }
-
-    // iOS Control Center / AirPods-এ মেটাডাটা দেখানোর জন্য MediaItem যুক্ত করা হলো
-    final audioSources = playlist.map((song) {
-      return AudioSource.uri(
-        Uri.file(song.filePath),
-        tag: MediaItem(
-          id: song.filePath,
-          album: "My Playlist",
-          title: song.title,
-          artist: "AH Music Player",
-        ),
-      );
-    }).toList();
+  // 🎵 প্লেলিস্ট লোড ও ফাইল প্লে করার সঠিক উপায়
+  Future<void> setPlaylist(List<SongModel> songs) async {
+    final playlist = ConcatenatingAudioSource(
+      children: songs.map((song) {
+        // 🔥 Uri.parse()-এর বদলে Uri.file() অথবা AudioSource.file ব্যবহার নিশ্চিত করবে যে ফাইলটি প্লেয়ারে সঠিকভাবে লোড হচ্ছে
+        return AudioSource.uri(
+          Uri.file(song.filePath), // <-- এখানে Uri.file ব্যবহার নিশ্চিত করতে হবে
+          tag: MediaItem(
+            id: song.filePath,
+            album: "Local Music",
+            title: song.title,
+            artist: "AH Music Player",
+          ),
+        );
+      }).toList(),
+    );
 
     try {
-      _playlistSource = ConcatenatingAudioSource(
-        children: audioSources,
-        useLazyPreparation: true,
-      );
-
-      await _player.setAudioSource(_playlistSource!);
-      await _player.setLoopMode(LoopMode.all);
+      await player.setAudioSource(playlist);
     } catch (e) {
-      print("Error setting playlist: $e");
+      print("Audio loading error: $e");
     }
   }
 
+  // ⏯️ প্লে / পজ প্লেব্যাক
+  Future<void> play() async => await player.play();
+  Future<void> pause() async => await player.pause();
+  Future<void> seek(Duration position) async => await player.seek(position);
+  Future<void> seekToNext() async => await player.seekToNext();
+  Future<void> seekToPrevious() async => await player.seekToPrevious();
+
   Future<void> playSongAtIndex(int index) async {
     try {
-      await _player.seek(Duration.zero, index: index);
-      await _player.play();
+      await player.seek(Duration.zero, index: index);
+      await player.play();
     } catch (e) {
-      print("Error playing song: $e");
+      print("Error playing song at index: $e");
     }
   }
 
   Future<void> removeAudioSourceAt(int index) async {
-    if (_playlistSource != null && index >= 0 && index < _playlistSource!.length) {
-      await _playlistSource!.removeAt(index);
+    final source = player.audioSource;
+    if (source is ConcatenatingAudioSource) {
+      await source.removeAt(index);
     }
   }
 
-  Future<void> seekToNext() async => await _player.seekToNext();
-  Future<void> seekToPrevious() async => await _player.seekToPrevious();
-  Future<void> seek(Duration position) async => await _player.seek(position);
-
-  void play() => _player.play();
-  void pause() => _player.pause();
-  void dispose() => _player.dispose();
+  void dispose() {
+    player.dispose();
+  }
 }
