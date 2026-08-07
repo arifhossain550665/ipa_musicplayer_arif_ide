@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
 
 import '../models/song_model.dart';
@@ -176,6 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ⚡ নো-কপি ফাইল পিকিং (ফোন স্টোরেজ থেকে সরাসরি সিলেক্ট হবে)
   Future<void> _pickSongs() async {
     await _requestStoragePermission();
 
@@ -192,23 +191,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result != null && result.files.isNotEmpty) {
       List<SongModel> newSongs = [];
-      final appDir = await getApplicationDocumentsDirectory();
 
       for (var file in result.files) {
         if (file.path != null) {
-          final originalFile = File(file.path!);
-          final fileName = p.basename(file.path!);
-          final savedPath = p.join(appDir.path, fileName);
-
-          File targetFile = File(savedPath);
-          if (!await targetFile.exists()) {
-            targetFile = await originalFile.copy(savedPath);
-          }
-
+          // 🚀 কোনো কপি করা ছাড়াই ফোনের আসল পাথ দিয়ে SongModel অবজেক্ট তৈরি
           newSongs.add(
             SongModel(
               title: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-              filePath: targetFile.path,
+              filePath: file.path!,
             ),
           );
         }
