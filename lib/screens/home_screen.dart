@@ -39,8 +39,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _requestStoragePermission();
-    _loadSavedData();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    await _requestStoragePermission();
+    await _loadSavedData();
     _listenToCurrentSongIndex();
   }
 
@@ -56,10 +60,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadSavedData() async {
     final savedPlaylists = await _storageService.loadPlaylists();
-    setState(() {
-      _playlists = savedPlaylists;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _playlists = savedPlaylists;
+        _isLoading = false;
+      });
+    }
 
     if (_playlists.isNotEmpty &&
         _playlists[_activePlaylistIndex].songs.isNotEmpty) {
@@ -67,7 +73,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 🔴 নতুন helper method - এটা error ধরে স্ক্রিনে popup এ দেখাবে
   Future<void> _trySetPlaylist(List<SongModel> songs) async {
     try {
       await _audioService.setPlaylist(songs);
@@ -171,7 +176,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 🔥 Android 11+ Fix: ফাইলটিকে অ্যাপের স্যান্ডবক্সে কপি করে নেওয়ার মেথড
   Future<void> _pickSongs() async {
     await _requestStoragePermission();
 
@@ -196,7 +200,6 @@ class _HomeScreenState extends State<HomeScreen> {
           final fileName = p.basename(file.path!);
           final savedPath = p.join(appDir.path, fileName);
 
-          // ফাইল যদি আগে কপি না হয়ে থাকে তবে কপি করবে
           File targetFile = File(savedPath);
           if (!await targetFile.exists()) {
             targetFile = await originalFile.copy(savedPath);
@@ -286,12 +289,6 @@ class _HomeScreenState extends State<HomeScreen> {
         (position, bufferedPosition, duration) => PositionData(
             position, bufferedPosition, duration ?? Duration.zero),
       );
-
-  @override
-  void dispose() {
-    _audioService.dispose();
-    super.dispose();
-  }
 
   String _formatDuration(Duration? duration) {
     if (duration == null) return "00:00";
