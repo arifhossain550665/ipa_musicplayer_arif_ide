@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import '../models/song_model.dart';
@@ -6,13 +7,14 @@ import '../models/song_model.dart';
 class AudioPlayerService {
   final AudioPlayer player = AudioPlayer();
 
-  // 🎵 প্লেলিস্ট লোড ও ফাইল প্লে করার সঠিক উপায়
+  // 🎵 প্লেলিস্ট লোড ও ফাইল প্লে করার ফিক্সড ফাংশন
   Future<void> setPlaylist(List<SongModel> songs) async {
     final playlist = ConcatenatingAudioSource(
       children: songs.map((song) {
-        // 🔥 Uri.parse()-এর বদলে Uri.file() অথবা AudioSource.file ব্যবহার নিশ্চিত করবে যে ফাইলটি প্লেয়ারে সঠিকভাবে লোড হচ্ছে
+        // Android and iOS safe File URI conversion
+        final uri = Uri.file(song.filePath);
         return AudioSource.uri(
-          Uri.file(song.filePath), // <-- এখানে Uri.file ব্যবহার নিশ্চিত করতে হবে
+          uri,
           tag: MediaItem(
             id: song.filePath,
             album: "Local Music",
@@ -26,11 +28,11 @@ class AudioPlayerService {
     try {
       await player.setAudioSource(playlist);
     } catch (e) {
-      print("Audio loading error: $e");
+      debugPrint("Audio Player Error: $e");
     }
   }
 
-  // ⏯️ প্লে / পজ প্লেব্যাক
+  // ⏯️ প্লে / পজ কন্ট্রোলস
   Future<void> play() async => await player.play();
   Future<void> pause() async => await player.pause();
   Future<void> seek(Duration position) async => await player.seek(position);
@@ -42,7 +44,7 @@ class AudioPlayerService {
       await player.seek(Duration.zero, index: index);
       await player.play();
     } catch (e) {
-      print("Error playing song at index: $e");
+      debugPrint("Error playing song at index $index: $e");
     }
   }
 
