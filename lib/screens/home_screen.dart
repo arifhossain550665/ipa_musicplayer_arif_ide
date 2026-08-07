@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:rxdart/rxdart.dart';
 
+import '../main.dart';
 import '../models/song_model.dart';
 import '../models/playlist_model.dart';
 import '../services/audio_player_service.dart';
@@ -37,13 +40,32 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _initApp();
-  }
-
-  Future<void> _initApp() async {
-    await _requestStoragePermission();
-    await _loadSavedData();
+    _requestStoragePermission();
+    _loadSavedData();
     _listenToCurrentSongIndex();
+
+    // 🔴 Background audio init fail korle user ke জানানো
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!AudioBackendStatus.isReady && mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Audio Service Error'),
+            content: SingleChildScrollView(
+              child: Text(
+                "Background audio service ঠিকমতো চালু হয়নি:\n\n${AudioBackendStatus.errorMessage}",
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _requestStoragePermission() async {
@@ -58,12 +80,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadSavedData() async {
     final savedPlaylists = await _storageService.loadPlaylists();
-    if (mounted) {
-      setState(() {
-        _playlists = savedPlaylists;
-        _isLoading = false;
-      });
-    }
+    setState(() {
+      _playlists = savedPlaylists;
+      _isLoading = false;
+    });
 
     if (_playlists.isNotEmpty &&
         _playlists[_activePlaylistIndex].songs.isNotEmpty) {
@@ -71,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // 🔴 helper method - error ধরে স্ক্রিনে popup এ দেখাবে
   Future<void> _trySetPlaylist(List<SongModel> songs) async {
     try {
       await _audioService.setPlaylist(songs);
@@ -174,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ⚡ নো-কপি ফাইল পিকিং (ফোন স্টোরেজ থেকে সরাসরি সিলেক্ট হবে)
+  // 🔥 Android 11+ Fix: ফাইলটিকে অ্যাপের স্যান্ডবক্সে কপি করে নেওয়ার মেথড
   Future<void> _pickSongs() async {
     await _requestStoragePermission();
 
@@ -191,14 +212,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result != null && result.files.isNotEmpty) {
       List<SongModel> newSongs = [];
+      final appDir = await getApplicationDocumentsDirectory();
 
       for (var file in result.files) {
         if (file.path != null) {
-          // 🚀 কোনো কপি করা ছাড়াই ফোনের আসল পাথ দিয়ে SongModel অবজেক্ট তৈরি
+          final originalFile = File(file.path!);
+          final fileName = p.basename(file.path!);
+          final savedPath = p.join(appDir.path, fileName);
+
+          // ফাইল যদি আগে কপি না হয়ে থাকে তবে কপি করবে
+          File targetFile = File(savedPath);
+          if (!await targetFile.exists()) {
+            targetFile = await originalFile.copy(savedPath);
+          }
+
           newSongs.add(
             SongModel(
               title: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-              filePath: file.path!,
+              filePath: targetFile.path,
             ),
           );
         }
@@ -279,6 +310,12 @@ class _HomeScreenState extends State<HomeScreen> {
         (position, bufferedPosition, duration) => PositionData(
             position, bufferedPosition, duration ?? Duration.zero),
       );
+
+  @override
+  void dispose() {
+    _audioService.dispose();
+    super.dispose();
+  }
 
   String _formatDuration(Duration? duration) {
     if (duration == null) return "00:00";
