@@ -1,4 +1,4 @@
-name: Build Android APK with Custom Icon & Name
+name: Build Android APK with JustAudio Support
 
 on:
   push:
@@ -29,30 +29,35 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      # ১. পুরানো অ্যান্ড্রয়েড ফোল্ডার মুছে নিখুঁত ফ্রেশ ফোল্ডার জেনারেট করা
+      # ১. ফ্রেশ অ্যান্ড্রয়েড ফোল্ডার তৈরি
       - name: Recreate Android Folder
         run: |
           rm -rf android
           flutter create --platforms=android --org com.ah.musicplayer --project-name ah_music_player .
 
-      # 🏷️ ২. অ্যাপের নাম পরিবর্তন করে "AH Music Player" রাখা
-      - name: Set App Name to AH Music Player
+      # 🏷️ ২. অ্যাপের নাম "AH Music Player" রাখা
+      - name: Set App Name
         run: |
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
           sed -i 's/android:label=".*"/android:label="AH Music Player"/' $MANIFEST_PATH
 
-      # 🔑 ৩. স্টোরেজ ও ব্যাকগ্রাউন্ড প্লেয়ার পারমিশন যোগ করা
-      - name: Add Permissions
+      # 🔑 ৩. পারমিশন এবং JustAudioBackground সার্ভিস যোগ করা (যা দিয়ে স্প্ল্যাশ ফিক্স হবে)
+      - name: Add Permissions and Audio Service to Manifest
         run: |
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
-          PERMISSIONS='<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>'
+          
+          # Permissions
+          PERMISSIONS='<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>'
           sed -i "/<manifest/a \    $PERMISSIONS" $MANIFEST_PATH
 
-      # 🖼️ ৪. আপনার দেওয়া লোগোটি অ্যাপের মূল আইকন হিসেবে বসানো
+          # JustAudioBackground Service Config inside <application>
+          SERVICE_CONFIG='<service android:name="com.ryanheise.just_audio_background.AudioProcessingService" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true" android:foregroundServiceType="mediaPlayback">\n            <intent-filter>\n                <action android:name="android.media.browse.MediaBrowserService" />\n            </intent-filter>\n        </service>'
+          sed -i "/<\/activity>/a \        $SERVICE_CONFIG" $MANIFEST_PATH
+
+      # 🖼️ ৪. কাস্টম আইকন লাগান (যদি assets/app_icon.png থাকে)
       - name: Apply Custom Logo/Icon
         run: |
           if [ -f "assets/app_icon.png" ]; then
-            # flutter_launcher_icons প্যাকেজ দিয়ে অটো আইকন সেট করার ব্যবস্থা
             flutter pub add --dev flutter_launcher_icons
             cat <<EOT >> pubspec.yaml
 
@@ -63,8 +68,6 @@ jobs:
           EOT
             flutter pub get
             dart run flutter_launcher_icons
-          else
-            echo "Warning: assets/app_icon.png not found! Default icon will be used."
           fi
 
       # 🛠️ ৫. APK বিল্ড করা
