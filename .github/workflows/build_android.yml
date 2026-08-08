@@ -41,12 +41,24 @@ jobs:
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
           sed -i 's/android:label=".*"/android:label="AH Music Player"/' $MANIFEST_PATH
 
-      # 🔑 ৩. পারমিশন, AudioServiceActivity এবং JustAudioBackground সার্ভিস যোগ করা
+      # ⚡ ৩. MainActivity.kt ফাইলকে AudioServiceActivity দিয়ে রিপ্লেস করা (মূল সমাধান)
+      - name: Fix MainActivity Kotlin File
+        run: |
+          KT_FILE="android/app/src/main/kotlin/com/ah/musicplayer/ah_music_player/MainActivity.kt"
+          cat <<EOT > $KT_FILE
+          package com.ah.musicplayer.ah_music_player
+
+          import com.ryanheise.audioservice.AudioServiceActivity
+
+          class MainActivity: AudioServiceActivity()
+          EOT
+
+      # 🔑 ৪. পারমিশন, AudioServiceActivity এবং JustAudioBackground সার্ভিস Manifest-এ যোগ করা
       - name: Add Permissions and Audio Service to Manifest
         run: |
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
 
-          # 1. FlutterActivity কে AudioServiceActivity দিয়ে রিপ্লেস করা (PlatformException ফিক্স)
+          # 1. Manifest-এ FlutterActivity পরিবর্তন
           sed -i 's/android:name="io.flutter.embedding.android.FlutterActivity"/android:name="com.ryanheise.audioservice.AudioServiceActivity"/' $MANIFEST_PATH
 
           # 2. Permissions injection
@@ -57,7 +69,7 @@ jobs:
           SERVICE_CONFIG='        <service android:name="com.ryanheise.audioservice.AudioService" android:foregroundServiceType="mediaPlayback" android:exported="true">\n            <intent-filter>\n                <action android:name="android.intent.action.MEDIA_BUTTON" />\n            </intent-filter>\n        </service>'
           sed -i "/<\/activity>/a $SERVICE_CONFIG" $MANIFEST_PATH
 
-      # 🖼️ ৪. কাস্টম আইকন অ্যাপ্লাই করা (যদি assets/app_icon.png থাকে)
+      # 🖼️ ৫. কাস্টম আইকন অ্যাপ্লাই করা (যদি assets/app_icon.png থাকে)
       - name: Apply Custom Logo/Icon
         run: |
           if [ -f "assets/app_icon.png" ]; then
@@ -73,7 +85,7 @@ jobs:
             dart run flutter_launcher_icons
           fi
 
-      # 🛠️ ৫. APK বিল্ড করা
+      # 🛠️ ৬. APK বিল্ড করা
       - name: Build Release APK
         run: flutter build apk --release
 
