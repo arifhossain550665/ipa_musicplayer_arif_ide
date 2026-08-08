@@ -1,96 +1,108 @@
-name: Build Android APK with JustAudio Support
+name: iOS Archive Build
 
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
+on: 
+push: 
+branches: [ main ] 
+pull_request: 
+branches: [ main ] 
+workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+jobs: 
+build: 
+runs-on: macos-latest 
+steps: 
+- name: Checkout repository 
+uses: actions/checkout@v4
 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+  - name: Setup Flutter
+    uses: subosito/flutter-action@v2
+    with:
+      flutter-version: '3.24.0'   # আপনার নিজের Flutter version বসান
+      channel: 'stable'
 
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+  - name: Flutter Doctor
+    run: flutter doctor -v
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.19.x'
-          channel: 'stable'
-          cache: true
+  - name: Get Flutter Dependencies
+    run: flutter pub get
 
-      - name: Install Dependencies
-        run: flutter pub get
+  - name: Ensure iOS platform files exist
+    run: |
+      if [ ! -d "ios" ] || [ ! -f "ios/Podfile" ]; then
+        flutter create . --platforms=ios
+      fi
 
-      # ১. ফ্রেশ অ্যান্ড্রয়েড ফোল্ডার তৈরি
-      - name: Recreate Android Folder
-        run: |
-          rm -rf android
-          flutter create --platforms=android --org com.ah.musicplayer --project-name ah_music_player .
+  - name: Install CocoaPods
+    run: |
+      sudo gem install cocoapods
+      pod --version
 
-      # 🏷️ ২. অ্যাপের নাম "AH Music Player" রাখা
-      - name: Set App Name
-        run: |
-          MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
-          sed -i 's/android:label=".*"/android:label="AH Music Player"/' $MANIFEST_PATH
+  - name: Clean old Pods
+    run: |
+      cd ios
+      rm -rf Pods
+      rm -f Podfile.lock
 
-      # ⚡ ৩. MainActivity.kt ফাইলকে AudioServiceActivity দিয়ে রিপ্লেস করা (মূল সমাধান)
-      - name: Fix MainActivity Kotlin File
-        run: |
-          KT_FILE="android/app/src/main/kotlin/com/ah/musicplayer/ah_music_player/MainActivity.kt"
-          cat <<EOT > $KT_FILE
-          package com.ah.musicplayer.ah_music_player
+  - name: Pod Install
+    run: |
+      cd ios
+      pod install --repo-update
 
-          import com.ryanheise.audioservice.AudioServiceActivity
+  - name: Force disable code signing in Xcode project
+    run: |
+      cd ios
+      sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' Runner.xcodeproj/project.pbxproj
+      sed -i '' 's/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = "";/g' Runner.xcodeproj/project.pbxproj
+      sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = .*/"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";/g' Runner.xcodeproj/project.pbxproj
 
-          class MainActivity: AudioServiceActivity()
-          EOT
+  - name: List available schemes (debug)
+    run: |
+      xcodebuild -workspace ios/Runner.xcworkspace -list
 
-      # 🔑 ৪. পারমিশন, AudioServiceActivity এবং JustAudioBackground সার্ভিস Manifest-এ যোগ করা
-      - name: Add Permissions and Audio Service to Manifest
-        run: |
-          MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+  - name: Build Unsigned iOS Archive
+    run: |
+      xcodebuild archive \
+        -workspace ios/Runner.xcworkspace \
+        -scheme Runner \
+        -configuration Release \
+        -archivePath build/ios/archive/Runner.xcarchive \
+        -destination "generic/platform=iOS" \
+        CODE_SIGN_STYLE=Manual \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO \
+        CODE_SIGN_IDENTITY="" \
+        EXPANDED_CODE_SIGN_IDENTITY="" \
+        PROVISIONING_PROFILE_SPECIFIER="" \
+        DEVELOPMENT_TEAM="" \
+        ENABLE_USER_SCRIPT_SANDBOXING=NO \
+        ONLY_ACTIVE_ARCH=NO \
+        IPHONEOS_DEPLOYMENT_TARGET=13.0
 
-          # 1. Manifest-এ FlutterActivity পরিবর্তন
-          sed -i 's/android:name="io.flutter.embedding.android.FlutterActivity"/android:name="com.ryanheise.audioservice.AudioServiceActivity"/' $MANIFEST_PATH
+  - name: Verify archive created
+    run: |
+      find build/ios/archive -maxdepth 4
 
-          # 2. Permissions injection
-          PERMISSIONS='    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>'
-          sed -i "/<manifest/a $PERMISSIONS" $MANIFEST_PATH
+  - name: Manually export IPA from Archive (unsigned)
+    run: |
+      APP_PATH="build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app"
+      if [ ! -d "$APP_PATH" ]; then
+        echo "❌ Runner.app not found inside archive!"
+        exit 1
+      fi
+      mkdir -p build/ios/ipa/Payload
+      cp -r "$APP_PATH" build/ios/ipa/Payload/
+      cd build/ios/ipa
+      zip -r -X Runner-unsigned.ipa Payload
+      cd -
 
-          # 3. Background Service Config
-          SERVICE_CONFIG='        <service android:name="com.ryanheise.audioservice.AudioService" android:foregroundServiceType="mediaPlayback" android:exported="true">\n            <intent-filter>\n                <action android:name="android.intent.action.MEDIA_BUTTON" />\n            </intent-filter>\n        </service>'
-          sed -i "/<\/activity>/a $SERVICE_CONFIG" $MANIFEST_PATH
+  - name: Upload Archive artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: xcarchive
+      path: build/ios/archive/Runner.xcarchive
 
-      # 🖼️ ৫. কাস্টম আইকন অ্যাপ্লাই করা (যদি assets/app_icon.png থাকে)
-      - name: Apply Custom Logo/Icon
-        run: |
-          if [ -f "assets/app_icon.png" ]; then
-            flutter pub add --dev flutter_launcher_icons
-            cat <<EOT >> pubspec.yaml
-
-          flutter_launcher_icons:
-            android: true
-            ios: true
-            image_path: "assets/app_icon.png"
-          EOT
-            flutter pub get
-            dart run flutter_launcher_icons
-          fi
-
-      # 🛠️ ৬. APK বিল্ড করা
-      - name: Build Release APK
-        run: flutter build apk --release
-
-      - name: Upload Finished APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: AH-Music-Player-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+  - name: Upload IPA artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: unsigned-ipa
+      path: build/ios/ipa/Runner-unsigned.ipa
