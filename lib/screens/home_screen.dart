@@ -80,10 +80,46 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadSavedData() async {
     final savedPlaylists = await _storageService.loadPlaylists();
+
+    // 🔴 ফিক্স: app reinstall/update এর পর কোনো গানের ফাইল আর না পাওয়া
+    // গেলে (broken/ghost entry) সেটা এখানেই অটোমেটিক প্লেলিস্ট থেকে বাদ
+    // দেওয়া হচ্ছে — যাতে ইউজারকে আর ম্যানুয়ালি পুরো প্লেলিস্ট ডিলিট
+    // করে আবার শুরু করতে না হয়।
+    final appDir = await getApplicationDocumentsDirectory();
+    bool anyRemoved = false;
+
+    for (final playlist in savedPlaylists) {
+      final validSongs = <SongModel>[];
+      for (final song in playlist.songs) {
+        final path = p.join(appDir.path, song.fileName);
+        if (song.fileName.isNotEmpty && await File(path).exists()) {
+          validSongs.add(song);
+        } else {
+          anyRemoved = true;
+        }
+      }
+      playlist.songs
+        ..clear()
+        ..addAll(validSongs);
+    }
+
+    if (anyRemoved) {
+      await _storageService.savePlaylists(savedPlaylists);
+    }
+
     setState(() {
       _playlists = savedPlaylists;
       _isLoading = false;
     });
+
+    if (anyRemoved && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'কিছু পুরনো গানের ফাইল খুঁজে পাওয়া যায়নি, প্লেলিস্ট থেকে সরিয়ে দেওয়া হয়েছে।'),
+        ),
+      );
+    }
 
     if (_playlists.isNotEmpty &&
         _playlists[_activePlaylistIndex].songs.isNotEmpty) {
@@ -229,7 +265,8 @@ class _HomeScreenState extends State<HomeScreen> {
           newSongs.add(
             SongModel(
               title: file.name.replaceAll(RegExp(r'\.[^.]+$'), ''),
-              filePath: targetFile.path,
+              // 🔴 ফিক্স: পুরো absolute path না রেখে শুধু filename রাখা হচ্ছে
+              fileName: p.basename(targetFile.path),
             ),
           );
         }
@@ -416,7 +453,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             final isSelected = index == _currentIndex;
 
                             return Dismissible(
-                              key: Key(song.filePath + index.toString()),
+                              key: Key(song.fileName + index.toString()),
                               direction: DismissDirection.endToStart,
                               confirmDismiss: (direction) async {
                                 _confirmDeleteSong(index);
