@@ -1,25 +1,17 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:rxdart/rxdart.dart';
 
 import '../main.dart';
 import '../models/song_model.dart';
 import '../models/playlist_model.dart';
-import '../services/audio_player_service.dart';
+import '../models/position_data.dart';
+import '../services/app_audio_service.dart';
 import '../services/storage_service.dart';
-
-class PositionData {
-  final Duration position;
-  final Duration bufferedPosition;
-  final Duration duration;
-
-  PositionData(this.position, this.bufferedPosition, this.duration);
-}
+import 'equalizer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,7 +21,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final AudioPlayerService _audioService = AudioPlayerService();
+  // 🎯 আগে AudioPlayerService (just_audio, শুধু Android-friendly) সরাসরি
+  // ব্যবহার হতো। এখন AppAudioService facade ব্যবহার হচ্ছে, যেটা ভিতরে
+  // ভিতরে Android-এ just_audio আর iOS-এ native AVAudioEngine বেছে নেয়।
+  final AppAudioService _audioService = AppAudioService();
   final StorageService _storageService = StorageService();
 
   List<PlaylistModel> _playlists = [];
@@ -44,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadSavedData();
     _listenToCurrentSongIndex();
 
-    // 🔴 Background audio init fail korle user ke জানানো
+    // 🔴 Background audio init fail korle user ke জানানো (Android/just_audio_background)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!AudioBackendStatus.isReady && mounted) {
         showDialog(
@@ -330,7 +325,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _listenToCurrentSongIndex() {
-    _audioService.player.currentIndexStream.listen((index) {
+    _audioService.currentIndexStream.listen((index) {
       if (mounted) {
         setState(() {
           _currentIndex = index;
@@ -338,15 +333,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
   }
-
-  Stream<PositionData> get _positionDataStream =>
-      Rx.combineLatest3<Duration, Duration, Duration?, PositionData>(
-        _audioService.player.positionStream,
-        _audioService.player.bufferedPositionStream,
-        _audioService.player.durationStream,
-        (position, bufferedPosition, duration) => PositionData(
-            position, bufferedPosition, duration ?? Duration.zero),
-      );
 
   @override
   void dispose() {
@@ -371,6 +357,16 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('AH Music Player'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.equalizer),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EqualizerScreen()),
+              );
+            },
+            tooltip: 'Equalizer',
+          ),
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: _showAboutDialog,
@@ -533,7 +529,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 4),
           StreamBuilder<PositionData>(
-            stream: _positionDataStream,
+            stream: _audioService.positionDataStream,
             builder: (context, snapshot) {
               final positionData = snapshot.data;
               final position = positionData?.position ?? Duration.zero;
@@ -599,11 +595,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () async => await _audioService.seekToPrevious(),
               ),
               const SizedBox(width: 16),
-              StreamBuilder<PlayerState>(
-                stream: _audioService.player.playerStateStream,
+              StreamBuilder<bool>(
+                stream: _audioService.playingStream,
                 builder: (context, snapshot) {
-                  final playerState = snapshot.data;
-                  final playing = playerState?.playing ?? false;
+                  final playing = snapshot.data ?? false;
 
                   return IconButton(
                     icon: Icon(
