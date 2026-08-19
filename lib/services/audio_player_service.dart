@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../models/song_model.dart';
 
 class AudioPlayerService {
@@ -11,22 +13,50 @@ class AudioPlayerService {
 
   final AudioPlayer player = AudioPlayer();
 
-  // 🎵 সরাসরি ফোন স্টোরেজ থেকে প্লেলিস্ট সেট করা
+  // 🔴 কোন গানগুলো শেষবার সফলভাবে লোড হয়েছিল (missing বাদ দিয়ে) সেটা
+  // বাইরে থেকে জানার জন্য — UI চাইলে ঘোস্ট/broken এন্ট্রি ক্লিন করতে পারবে
+  List<String> lastMissingFileNames = [];
+
+  // 🎯 প্রতিটা গানের filename দিয়ে fresh absolute path বানানো (প্রতিবার
+  // app চালু হওয়ার সময় বা reinstall/update এর পরও ঠিকভাবে কাজ করবে)
+  Future<String> _resolveAbsolutePath(String fileName) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    return p.join(appDir.path, fileName);
+  }
+
+  // 🎵 প্লেলিস্ট সেট করা — এখন প্রতিটা ফাইল আগে exist করে কিনা চেক করে,
+  // missing ফাইল থাকলে পুরো প্লেলিস্ট fail না করিয়ে শুধু সেটা বাদ দেয়
   Future<void> setPlaylist(List<SongModel> songs) async {
     try {
+      lastMissingFileNames = [];
+
       if (songs.isEmpty) {
         await player.stop();
         return;
       }
 
-      final playlist = ConcatenatingAudioSource(
-        useLazyPreparation: true,
-        children: songs.map((song) {
-          // 🎯 ফাইল পাথ সরাসরি ফোনের ফাইল সিস্টেম থেকে রিড করা
-          final uri = Uri.file(song.filePath);
-          final uniqueId = song.filePath.hashCode.toString();
+      final List<AudioSource> children = [];
 
-          return AudioSource.uri(
+      for (final song in songs) {
+        if (song.fileName.isEmpty) {
+          lastMissingFileNames.add(song.title);
+          continue;
+        }
+
+        final absPath = await _resolveAbsolutePath(song.fileName);
+        final exists = await File(absPath).exists();
+
+        if (!exists) {
+          debugPrint("Skipping missing file: $absPath");
+          lastMissingFileNames.add(song.title);
+          continue;
+        }
+
+        final uri = Uri.file(absPath);
+        final uniqueId = absPath.hashCode.toString();
+
+        children.add(
+          AudioSource.uri(
             uri,
             tag: MediaItem(
               id: uniqueId,
@@ -34,11 +64,22 @@ class AudioPlayerService {
               title: song.title.isNotEmpty ? song.title : "Unknown Title",
               artist: "AH Music Player",
             ),
-          );
-        }).toList(),
+          ),
+        );
+      }
+
+      if (children.isEmpty) {
+        await player.stop();
+        return;
+      }
+
+      final playlist = ConcatenatingAudioSource(
+        useLazyPreparation: true,
+        children: children,
       );
 
-      await player.setAudioSource(playlist, initialIndex: 0, initialPosition: Duration.zero);
+      await player.setAudioSource(playlist,
+          initialIndex: 0, initialPosition: Duration.zero);
     } catch (e, stackTrace) {
       debugPrint("AudioPlayerService SetPlaylist Error: $e");
       debugPrint("Stacktrace: $stackTrace");
