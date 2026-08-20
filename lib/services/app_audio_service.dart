@@ -10,6 +10,7 @@ import '../models/equalizer_preset.dart';
 import '../models/eq_band_info.dart';
 import 'audio_player_service.dart';
 import 'ios_native_audio_service.dart';
+import 'equalizer_storage_service.dart';
 
 // 🎯 এই ক্লাসটাই একমাত্র জায়গা যেটা UI (home_screen.dart,
 // equalizer_screen.dart) ব্যবহার করবে। ভিতরে ভিতরে platform অনুযায়ী
@@ -24,6 +25,7 @@ class AppAudioService {
 
   final AudioPlayerService _android = AudioPlayerService();
   final IOSNativeAudioService _ios = IOSNativeAudioService();
+  final EqualizerStorageService _eqStorage = EqualizerStorageService();
 
   List<SongModel> _currentSongs = [];
   int? _currentIndex;
@@ -31,6 +33,15 @@ class AppAudioService {
   final _playingController = StreamController<bool>.broadcast();
 
   List<String> lastMissingFileNames = [];
+
+  // 🔴 EQ-এর বর্তমান অবস্থা মেমোরিতে cache করা থাকে — UI (equalizer_screen)
+  // এখান থেকেই শুরুর মান পড়বে, প্রতিবার backend query করা লাগবে না।
+  bool _eqEnabled = false;
+  String _eqPresetName = 'Flat';
+  List<double> _eqGains =
+      List.filled(EqualizerPresets.standardFrequencies.length, 0.0);
+  bool _eqRestored = false;
+  Future<void>? _eqRestoreFuture;
 
   AppAudioService._internal() {
     if (_useNativeIOSEngine) {
@@ -159,7 +170,44 @@ class AppAudioService {
 
   bool get isEqualizerSupported => true;
 
-  Future<void> setEqualizerEnabled(bool enabled) async {
+  // 🔴 UI-এর জন্য cached getters — এখান থেকে শুরুর অবস্থা পড়া হয়
+  bool get equalizerEnabledCached => _eqEnabled;
+  String get activePresetName => _eqPresetName;
+  List<double> get currentGains => List.unmodifiable(_eqGains);
+
+  // 🔴 App চালু হওয়ার পর একবার কল করা হয় (home_screen initState-এ) —
+  // আগে সেভ করা EQ অবস্থা (on/off, preset, gain) থাকলে সেটা backend-এ
+  // আবার apply করে দেয়। বারবার কল করলেও একবারই আসল কাজ হয় (idempotent)।
+  Future<void> restoreEqualizerSettings() {
+    if (_eqRestored) return _eqRestoreFuture ?? Future.value();
+    _eqRestored = true;
+    _eqRestoreFuture = _doRestoreEqualizerSettings();
+    return _eqRestoreFuture!;
+  }
+
+  Future<void> _doRestoreEqualizerSettings() async {
+    try {
+      final enabled = await _eqStorage.loadEnabled();
+      final saved = await _eqStorage.loadState();
+
+      if (saved != null && saved.gains.isNotEmpty) {
+        _eqGains = saved.gains;
+        _eqPresetName = saved.presetName;
+      }
+      _eqEnabled = enabled;
+
+      // backend-এ আসল audio filtering আবার চালু করা (persist না করে, কারণ
+      // এটা তো storage থেকেই পড়া ডেটা — আবার সেভ করার দরকার নেই)
+      await _applyEnabledToBackend(enabled);
+      for (int i = 0; i < _eqGains.length; i++) {
+        await _applyBandGainToBackend(i, _eqGains[i]);
+      }
+    } catch (_) {
+      // প্রথমবার app চালু হলে কোনো saved data থাকবে না — সেটা স্বাভাবিক
+    }
+  }
+
+  Future<void> _applyEnabledToBackend(bool enabled) async {
     if (_useNativeIOSEngine) {
       await _ios.setEqualizerEnabled(enabled);
     } else {
@@ -167,7 +215,7 @@ class AppAudioService {
     }
   }
 
-  Future<void> setBandGain(int index, double gain) async {
+  Future<void> _applyBandGainToBackend(int index, double gain) async {
     if (_useNativeIOSEngine) {
       await _ios.setBandGain(index, gain);
     } else {
@@ -175,12 +223,34 @@ class AppAudioService {
     }
   }
 
+  Future<void> setEqualizerEnabled(bool enabled) async {
+    _eqEnabled = enabled;
+    await _applyEnabledToBackend(enabled);
+    await _eqStorage.saveEnabled(enabled); // 🔴 সেভ হচ্ছে
+  }
+
+  Future<void> setBandGain(int index, double gain) async {
+    if (index >= 0 && index < _eqGains.length) {
+      _eqGains[index] = gain;
+    }
+    _eqPresetName = 'Custom';
+    await _applyBandGainToBackend(index, gain);
+    await _eqStorage.saveState(_eqPresetName, _eqGains); // 🔴 সেভ হচ্ছে
+  }
+
   Future<void> applyPreset(EqualizerPreset preset) async {
+    _eqPresetName = preset.name;
+    for (int i = 0; i < _eqGains.length && i < preset.gains.length; i++) {
+      _eqGains[i] = preset.gains[i];
+    }
+
     if (_useNativeIOSEngine) {
       await _ios.applyPreset(preset);
     } else {
       await _android.applyPreset(preset);
     }
+
+    await _eqStorage.saveState(_eqPresetName, _eqGains); // 🔴 সেভ হচ্ছে
   }
 
   // iOS-এ fixed ৭-band (min/max দেখানোর জন্য Apple Music-স্টাইল -12..+12 dB
@@ -192,8 +262,7 @@ class AppAudioService {
           frequencyHz: EqualizerPresets.standardFrequencies[i],
           minDb: -12,
           maxDb: 12,
-          currentGain: 0, // iOS engine নিজে থেকে current gain query করা যায় না;
-          // preset/manual change করার সময় UI নিজেই local state রাখে
+          currentGain: i < _eqGains.length ? _eqGains[i] : 0,
         );
       });
     }
