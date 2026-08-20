@@ -26,13 +26,23 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
   }
 
   Future<void> _init() async {
+    // 🔴 আগে সেভ করা EQ অবস্থা backend-এ apply হয়ে থাকতে পারে (home_screen
+    // থেকে already restore হয়ে থাকলে এটা সাথে সাথে রিটার্ন করবে)
+    await _audioService.restoreEqualizerSettings();
+
     try {
       _bands = await _audioService.getBandInfos();
-      _liveGains = _bands.map((b) => b.currentGain).toList();
     } catch (e) {
       _bands = [];
-      _liveGains = [];
     }
+
+    _enabled = _audioService.equalizerEnabledCached;
+    _activePresetName = _audioService.activePresetName;
+    final cachedGains = _audioService.currentGains;
+    _liveGains = List.generate(
+      _bands.length,
+      (i) => i < cachedGains.length ? cachedGains[i] : 0.0,
+    );
 
     if (mounted) {
       setState(() => _isLoading = false);
