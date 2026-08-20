@@ -36,6 +36,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _requestStoragePermission();
+    // 🔴 আগে সেভ করা Equalizer অবস্থা (on/off, preset, gain) এখানেই
+    // পুনরায় apply করে দেওয়া হচ্ছে — যাতে গান বাজানো শুরু হওয়ার সময়
+    // থেকেই EQ effect থাকে, ইউজারকে আর ম্যানুয়ালি EQ স্ক্রিনে গিয়ে
+    // অন করা লাগবে না।
+    _audioService.restoreEqualizerSettings();
     _loadSavedData();
     _listenToCurrentSongIndex();
 
