@@ -320,7 +320,7 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         const SizedBox(height: 10),
         const Text(
-          'App Developer: Arif Hossain',
+          'App Developers: Arif & Nahim',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 5),
